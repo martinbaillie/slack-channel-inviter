@@ -4,13 +4,17 @@ import (
 	"log"
 	"os"
 
-	"github.com/nlopes/slack"
+	api "github.com/nlopes/slack"
 )
 
+// UsersInConversationLimit is the max users Slack will return in the API query
+const UsersInConversationLimit = 500
+
+// SlackInviter encapsulates Slack inviter methods and data
 type SlackInviter struct {
-	api   *slack.Client
-	from  slack.Channel
-	to    slack.Channel
+	api   *api.Client
+	from  api.Channel
+	to    api.Channel
 	users map[string]string
 }
 
@@ -27,7 +31,7 @@ func (slack *SlackInviter) setUsers() {
 }
 
 func (slack *SlackInviter) setChannels(from, to string) {
-	channels, err := slack.api.GetChannels(true)
+	channels, err := slack.api.GetChannels(true, api.GetChannelsOptionExcludeArchived())
 	if err != nil {
 		log.Fatalf("%s\n", err)
 	}
@@ -39,10 +43,30 @@ func (slack *SlackInviter) setChannels(from, to string) {
 			slack.to = channel
 		}
 	}
+
+	toMembers, _, err := slack.api.GetUsersInConversation(&api.GetUsersInConversationParameters{
+		ChannelID: slack.to.ID,
+		Limit:     UsersInConversationLimit,
+	})
+	if err != nil {
+		log.Fatalf("%s\n", err)
+	}
+	slack.to.Members = toMembers
+
+	fromMembers, _, err := slack.api.GetUsersInConversation(&api.GetUsersInConversationParameters{
+		ChannelID: slack.from.ID,
+		Limit:     UsersInConversationLimit,
+	})
+	if err != nil {
+		log.Fatalf("%s\n", err)
+	}
+	slack.from.Members = fromMembers
 }
 
+// NewSlackInviter creates a Slack inviter using the SLACK_TOKEN in the
+// environment.
 func NewSlackInviter(from, to string) *SlackInviter {
-	s := &SlackInviter{api: slack.New(os.Getenv("SLACK_TOKEN"))}
+	s := &SlackInviter{api: api.New(os.Getenv("SLACK_TOKEN"))}
 	s.setChannels(from, to)
 	s.setUsers()
 	return s
